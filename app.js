@@ -540,32 +540,87 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
     });
 });
 
+// ==================== 智能合并逻辑 ====================
+function mergeData(remoteData) {
+    if (!remoteData || remoteData.length === 0) return;
+    
+    const localMap = {};
+    expressList.forEach(item => {
+        localMap[item.trackingNumber] = item;
+    });
+    
+    const merged = [];
+    const processedNumbers = new Set();
+    
+    // 遍历远程数据
+    remoteData.forEach(remoteItem => {
+        processedNumbers.add(remoteItem.trackingNumber);
+        
+        const localItem = localMap[remoteItem.trackingNumber];
+        
+        if (!localItem) {
+            // 本地没有 → 添加
+            merged.push({ ...remoteItem });
+        } else {
+            // 本地有 → 合并规则：已签收优先
+            const mergedItem = { ...localItem };
+            
+            // 如果远程是"已签收"，本地也改为"已签收"
+            if (remoteItem.signed) {
+                mergedItem.signed = true;
+                mergedItem.signDate = remoteItem.signDate || Date.now();
+            }
+            // 如果远程是"未签收"，保持本地状态不变（不把已签收改回未签收）
+            
+            merged.push(mergedItem);
+        }
+    });
+    
+    // 添加本地独有的数据
+    expressList.forEach(localItem => {
+        if (!processedNumbers.has(localItem.trackingNumber)) {
+            merged.push({ ...localItem });
+        }
+    });
+    
+    expressList = merged;
+}
+
 // ==================== P2P 同步绑定 ====================
 p2p.onDataReceived = (msg) => {
     switch (msg.type) {
         case 'sync-all':
-            expressList = msg.data;
+            // 智能合并：不是直接覆盖，而是逐条合并
+            mergeData(msg.data);
             saveData(expressList);
             render();
-            showToast(`已同步 ${msg.data.length} 条记录`);
+            showToast(`已同步，共 ${expressList.length} 条记录`);
             break;
+            
         case 'add':
-            if (!expressList.find(e => e.id === msg.item.id)) {
+            // 新增单号（如果本地没有就添加）
+            if (!expressList.find(e => e.trackingNumber === msg.item.trackingNumber)) {
                 expressList.push(msg.item);
                 saveData(expressList);
                 render();
                 showToast('收到新单号: ' + msg.item.trackingNumber);
             }
             break;
+            
         case 'delete':
-            expressList = expressList.filter(e => e.id !== msg.id);
+            // 删除单号
+            expressList = expressList.filter(e => e.trackingNumber !== msg.trackingNumber);
             saveData(expressList);
             render();
             break;
+            
         case 'update':
-            const index = expressList.findIndex(e => e.id === msg.item.id);
-            if (index !== -1) {
-                expressList[index] = msg.item;
+            // 更新状态：只改为"已签收"，不改回"未签收"
+            const localItem = expressList.find(e => e.trackingNumber === msg.item.trackingNumber);
+            if (localItem && msg.item.signed) {
+                // 对方标记为已签收 → 本地也标记为已签收
+                localItem.signed = true;
+                localItem.signDate = msg.item.signDate;
                 saveData(expressList);
                 render();
             }
@@ -599,12 +654,11 @@ setTimeout(() => loadScannerLibrary(() => { }), 1000);
 // ==================== P2P UI ====================
 function showP2PDialog() {
     if (p2p.roomId) {
-        // 已连接，显示退出确认
-        if (confirm('确定要退出同步吗？')) {
-            leaveP2P();
-        }
+        // 已连接 → 显示房间码
+        showRoomCodeDialog(p2p.roomId);
         return;
     }
+    // 未连接 → 显示创建/加入弹窗
     document.getElementById('p2pModal').classList.add('show');
 }
 
@@ -613,10 +667,17 @@ function showRoomCodeDialog(roomId) {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:center;justify-content:center;';
     
+    // 判断是房主还是加入者
+    const isHost = p2p.isHost;
+    
     overlay.innerHTML = `
         <div style="background:white;border-radius:16px;padding:24px;width:90%;max-width:360px;text-align:center;">
-            <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">🏠 房间已创建</div>
-            <div style="font-size:14px;color:#666;margin-bottom:16px;">告诉其他设备输入此房间码</div>
+            <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">
+                ${isHost ? '🏠 房间已创建' : '📡 已加入房间'}
+            </div>
+            <div style="font-size:14px;color:#666;margin-bottom:16px;">
+                ${isHost ? '告诉其他设备输入此房间码' : '当前房间码'}
+            </div>
             <div style="
                 background:#f5f5f5;
                 border-radius:12px;
