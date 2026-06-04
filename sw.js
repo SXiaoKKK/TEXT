@@ -1,4 +1,4 @@
-const CACHE_NAME = 'express-v3';
+const CACHE_NAME = 'express-v1';
 const urlsToCache = [
     '.',
     'index.html',
