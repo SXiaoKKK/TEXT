@@ -11,6 +11,7 @@
     <title>快递管理</title>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -366,6 +367,7 @@
     <div class="toolbar" id="toolbar">
         <span class="toolbar-title" id="toolbarTitle">快递管理</span>
         <div class="toolbar-actions">
+            <button class="toolbar-btn" onclick="showP2PDialog()" id="btnP2P" title="多设备同步">📡</button>
             <button class="toolbar-btn" onclick="showSearchDialog()" id="btnSearch" title="搜索">🔍</button>
             <button class="toolbar-btn" onclick="exitSearchMode()" id="btnExitSearch" style="display:none"
                 title="退出搜索">✖</button>
@@ -376,6 +378,13 @@
             <button class="toolbar-btn" onclick="exitSelectionMode()" id="btnExitSelect" style="display:none"
                 title="退出选择">✖</button>
         </div>
+    </div>
+
+    <div style="background:#e3f2fd;color:#1976D2;padding:4px 16px;font-size:12px;text-align:center;display:none;"
+        id="p2pBar">
+        <span id="p2pStatus">未连接</span>
+        <button onclick="leaveP2P()"
+            style="margin-left:8px;background:none;border:1px solid #1976D2;color:#1976D2;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">退出</button>
     </div>
 
     <div class="chip-group">
@@ -426,6 +435,26 @@
         </div>
     </div>
 
+    <!-- P2P 连接弹窗 -->
+    <div class="modal-overlay" id="p2pModal">
+        <div class="modal">
+            <div class="modal-title">📡 多设备同步</div>
+            <div style="text-align:center;margin-bottom:16px;">
+                <button class="btn btn-primary" onclick="createP2PRoom()"
+                    style="width:100%;margin-bottom:8px;">创建房间</button>
+                <div style="color:#999;margin:12px 0;">或</div>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="roomInput" placeholder="输入房间码"
+                        style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:15px;text-align:center;"
+                        maxlength="6">
+                    <button class="btn btn-primary" onclick="joinP2PRoom()">加入</button>
+                </div>
+            </div>
+            <button class="btn btn-outline" onclick="closeModal('p2pModal')" style="width:100%;">取消</button>
+        </div>
+    </div>
+
+    <script src="p2p.js"></script>
     <script src="app.js"></script>
 
     <script>
