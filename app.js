@@ -544,27 +544,24 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 p2p.onDataReceived = (msg) => {
     switch (msg.type) {
         case 'sync-all':
-            // 收到全量数据
             expressList = msg.data;
             saveData(expressList);
             render();
-            showToast('数据已同步');
+            showToast(`已同步 ${msg.data.length} 条记录`);
             break;
-
         case 'add':
             if (!expressList.find(e => e.id === msg.item.id)) {
                 expressList.push(msg.item);
                 saveData(expressList);
                 render();
+                showToast('收到新单号: ' + msg.item.trackingNumber);
             }
             break;
-
         case 'delete':
             expressList = expressList.filter(e => e.id !== msg.id);
             saveData(expressList);
             render();
             break;
-
         case 'update':
             const index = expressList.findIndex(e => e.id === msg.item.id);
             if (index !== -1) {
@@ -574,6 +571,18 @@ p2p.onDataReceived = (msg) => {
             }
             break;
     }
+};
+
+p2p.onSendAllData = () => expressList;
+
+p2p.onStatusChange = (status) => {
+    const statusEl = document.getElementById('p2pStatus');
+    if (statusEl) statusEl.textContent = status;
+};
+
+// 房间创建成功时显示房间码
+p2p.onRoomCreated = (roomId) => {
+    showRoomCodeDialog(roomId);
 };
 
 p2p.onSendAllData = () => expressList;
@@ -597,6 +606,46 @@ function showP2PDialog() {
         return;
     }
     document.getElementById('p2pModal').classList.add('show');
+}
+
+// 显示房间码弹窗
+function showRoomCodeDialog(roomId) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:center;justify-content:center;';
+    
+    overlay.innerHTML = `
+        <div style="background:white;border-radius:16px;padding:24px;width:90%;max-width:360px;text-align:center;">
+            <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">🏠 房间已创建</div>
+            <div style="font-size:14px;color:#666;margin-bottom:16px;">告诉其他设备输入此房间码</div>
+            <div style="
+                background:#f5f5f5;
+                border-radius:12px;
+                padding:20px;
+                font-size:36px;
+                font-weight:bold;
+                color:#1976D2;
+                letter-spacing:8px;
+                margin-bottom:16px;
+                user-select:all;
+                -webkit-user-select:all;
+            ">${roomId}</div>
+            <div style="display:flex;gap:8px;">
+                <button id="btnCopyRoom" style="flex:1;padding:14px;border-radius:8px;border:none;background:#1976D2;color:white;font-size:16px;cursor:pointer;">复制房间码</button>
+                <button id="btnCloseRoom" style="flex:1;padding:14px;border-radius:8px;border:1px solid #ddd;background:white;color:#666;font-size:16px;cursor:pointer;">关闭</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    overlay.querySelector('#btnCopyRoom').onclick = () => {
+        navigator.clipboard.writeText(roomId).then(() => {
+            showToast('房间码已复制: ' + roomId);
+        }).catch(() => showToast('复制失败，请手动记录'));
+    };
+    
+    overlay.querySelector('#btnCloseRoom').onclick = () => overlay.remove();
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 function createP2PRoom() {
