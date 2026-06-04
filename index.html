@@ -76,6 +76,7 @@
             top: 48px;
             z-index: 99;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            align-items: center;
         }
 
         .chip {
@@ -170,27 +171,24 @@
             font-size: 15px;
         }
 
-        .fab {
-            position: fixed;
-            top: 59px;
-            right: 24px;
-            width: 56px;
-            height: 56px;
+        .add-btn {
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             background: #1976D2;
             color: white;
             border: none;
-            font-size: 28px;
+            font-size: 22px;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
-            z-index: 200;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
+            margin-left: auto;
         }
 
-        .fab:active {
-            transform: scale(0.95);
+        .add-btn:active {
+            transform: scale(0.9);
         }
 
         .selection-bar {
@@ -369,17 +367,22 @@
         <span class="toolbar-title" id="toolbarTitle">快递管理</span>
         <div class="toolbar-actions">
             <button class="toolbar-btn" onclick="showSearchDialog()" id="btnSearch" title="搜索">🔍</button>
-            <button class="toolbar-btn" onclick="exitSearchMode()" id="btnExitSearch" style="display:none" title="退出搜索">✖</button>
-            <button class="toolbar-btn" onclick="toggleSelectAll()" id="btnSelectAll" style="display:none" title="全选">☐</button>
-            <button class="toolbar-btn" onclick="showBatchDialog()" id="btnBatch" style="display:none" title="批量操作">✏</button>
-            <button class="toolbar-btn" onclick="exitSelectionMode()" id="btnExitSelect" style="display:none" title="退出选择">✖</button>
+            <button class="toolbar-btn" onclick="exitSearchMode()" id="btnExitSearch" style="display:none"
+                title="退出搜索">✖</button>
+            <button class="toolbar-btn" onclick="toggleSelectAll()" id="btnSelectAll" style="display:none"
+                title="全选">☐</button>
+            <button class="toolbar-btn" onclick="showBatchDialog()" id="btnBatch" style="display:none"
+                title="批量操作">✏</button>
+            <button class="toolbar-btn" onclick="exitSelectionMode()" id="btnExitSelect" style="display:none"
+                title="退出选择">✖</button>
         </div>
     </div>
 
     <div class="chip-group">
         <div class="chip active" data-filter="all" onclick="switchFilter('all')">全部</div>
-        <div class="chip" data-filter="unsigned" onclick="switchFilter('unsigned')">未签收快递</div>
-        <div class="chip" data-filter="signed" onclick="switchFilter('signed')">已签收快递</div>
+        <div class="chip" data-filter="unsigned" onclick="switchFilter('unsigned')">未签收</div>
+        <div class="chip" data-filter="signed" onclick="switchFilter('signed')">已签收</div>
+        <button class="add-btn" onclick="showAddDialog()" title="添加">+</button>
     </div>
 
     <div class="list-container" id="listContainer">
@@ -417,7 +420,8 @@
             <div class="modal-title">搜索快递单号</div>
             <textarea class="modal-input" id="searchInput" placeholder="输入快递单号搜索&#10;支持多个单号同时搜索"></textarea>
             <div class="modal-buttons">
-                <button class="btn btn-outline" onclick="startScan()" style="background:#fff3e0;border-color:#e65100;color:#e65100;">📷 扫码识别</button>
+                <button class="btn btn-outline" onclick="startScan()"
+                    style="background:#fff3e0;border-color:#e65100;color:#e65100;">📷 扫码识别</button>
                 <button class="btn btn-outline" onclick="closeModal('searchModal')">取消</button>
                 <button class="btn btn-primary" onclick="performSearch()">搜索</button>
             </div>
