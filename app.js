@@ -28,28 +28,28 @@ let scannerLibraryCallbacks = [];
 // ==================== 渲染 ====================
 function render() {
     const container = document.getElementById('listContainer');
-    
+
     let filtered = searchMode ? (window.searchResults || expressList) : expressList;
     if (!searchMode) {
         if (currentFilter === 'signed') filtered = filtered.filter(e => e.signed);
         else if (currentFilter === 'unsigned') filtered = filtered.filter(e => !e.signed);
     }
-    
+
     filtered.sort((a, b) => b.createDate - a.createDate);
-    
+
     const groups = {};
     filtered.forEach(item => {
         const dateKey = formatDate(new Date(item.createDate));
         if (!groups[dateKey]) groups[dateKey] = [];
         groups[dateKey].push(item);
     });
-    
+
     if (Object.keys(groups).length === 0) {
         container.innerHTML = '<div class="empty-state">暂无快递单号</div>';
         updateUI();
         return;
     }
-    
+
     let html = '';
     for (const [date, items] of Object.entries(groups)) {
         html += `<div class="date-header">${date}</div>`;
@@ -65,7 +65,7 @@ function render() {
             `;
         });
     }
-    
+
     container.innerHTML = html;
     bindItemEvents();
     updateUI();
@@ -73,7 +73,7 @@ function render() {
 
 function bindItemEvents() {
     document.querySelectorAll('.express-item').forEach(item => {
-        item.addEventListener('touchstart', function(e) {
+        item.addEventListener('touchstart', function (e) {
             hasMoved = false;
             if (!selectionMode) {
                 longPressTimer = setTimeout(() => {
@@ -84,16 +84,16 @@ function bindItemEvents() {
                 }, 500);
             }
         }, { passive: true });
-        
-        item.addEventListener('touchmove', function(e) {
-            if (Math.abs(e.touches[0].clientX - e.touches[0].clientX) > 10 || 
+
+        item.addEventListener('touchmove', function (e) {
+            if (Math.abs(e.touches[0].clientX - e.touches[0].clientX) > 10 ||
                 Math.abs(e.touches[0].clientY - e.touches[0].clientY) > 10) {
                 hasMoved = true;
                 clearTimeout(longPressTimer);
             }
         }, { passive: true });
-        
-        item.addEventListener('touchend', function(e) {
+
+        item.addEventListener('touchend', function (e) {
             clearTimeout(longPressTimer);
             if (!hasMoved) {
                 if (selectionMode) {
@@ -123,7 +123,7 @@ function updateUI() {
     document.getElementById('btnSelectAll').style.display = selectionMode ? '' : 'none';
     document.getElementById('btnBatch').style.display = selectionMode ? '' : 'none';
     document.getElementById('btnExitSelect').style.display = selectionMode ? '' : 'none';
-    
+
     if (searchMode) {
         document.getElementById('toolbarTitle').textContent = '搜索结果';
     } else if (selectionMode && selectedIds.size > 0) {
@@ -131,7 +131,7 @@ function updateUI() {
     } else {
         document.getElementById('toolbarTitle').textContent = '快递管理';
     }
-    
+
     const bar = document.getElementById('selectionBar');
     if (selectionMode && selectedIds.size > 0) {
         bar.classList.add('show');
@@ -139,13 +139,13 @@ function updateUI() {
     } else {
         bar.classList.remove('show');
     }
-    
+
     const filtered = expressList.filter(e => {
         if (currentFilter === 'signed') return e.signed;
         if (currentFilter === 'unsigned') return !e.signed;
         return true;
     });
-    document.getElementById('btnSelectAll').textContent = 
+    document.getElementById('btnSelectAll').textContent =
         (selectedIds.size === filtered.length && filtered.length > 0) ? '☑' : '☐';
 }
 
@@ -186,7 +186,7 @@ function showAddDialog() {
     document.getElementById('addInput').focus();
     navigator.clipboard?.readText().then(text => {
         if (text) document.getElementById('addInput').value = text;
-    }).catch(() => {});
+    }).catch(() => { });
 }
 
 function closeModal(id) {
@@ -202,26 +202,28 @@ function pasteAndAdd() {
 function addExpress() {
     const text = document.getElementById('addInput').value.trim();
     if (!text) return;
-    
+
     const numbers = parseTrackingNumbers(text);
     if (numbers.length === 0) {
         showToast('未识别到有效的快递单号');
         return;
     }
-    
+
     let addedCount = 0;
     numbers.forEach(num => {
         if (!expressList.find(e => e.trackingNumber === num)) {
-            expressList.push({
+            const newItem = {
                 id: generateId(),
                 trackingNumber: num,
                 createDate: Date.now(),
                 signed: false
-            });
+            };
+            expressList.push(newItem);
+            p2p.broadcast({ type: 'add', item: newItem }); // ← 添加这行
             addedCount++;
         }
     });
-    
+
     saveData(expressList);
     closeModal('addModal');
     document.getElementById('addInput').value = '';
@@ -238,16 +240,16 @@ function showSearchDialog() {
 function performSearch() {
     const text = document.getElementById('searchInput').value.trim();
     if (!text) return;
-    
+
     const numbers = parseTrackingNumbers(text);
     if (numbers.length === 0) {
         showToast('请输入有效的快递单号');
         return;
     }
-    
+
     searchMode = true;
     window.searchResults = expressList.filter(e => numbers.some(n => e.trackingNumber.includes(n)));
-    
+
     closeModal('searchModal');
     document.getElementById('searchInput').value = '';
     render();
@@ -267,7 +269,12 @@ function showBatchDialog() {
 
 function toggleSelectedStatus(signed) {
     const ids = Array.from(selectedIds);
-    expressList.forEach(e => { if (ids.includes(e.id)) e.signed = signed; });
+    expressList.forEach(e => {
+        if (ids.includes(e.id)) {
+            e.signed = signed;
+            p2p.broadcast({ type: 'update', item: e }); // ← 添加这行
+        }
+    });
     saveData(expressList);
     showToast(`已标记为${signed ? '已签收' : '未签收'}`);
     exitSelectionMode();
@@ -301,10 +308,10 @@ function createOverlay() {
 function showItemActionDialog(id) {
     const item = expressList.find(e => e.id === id);
     if (!item) return;
-    
+
     const overlay = createOverlay();
     const actionText = item.signed ? '标记为未签收' : '标记为已签收';
-    
+
     overlay.innerHTML = `
         <div style="background:white;border-radius:16px;padding:24px;width:85%;max-width:360px;">
             <div style="font-size:18px;font-weight:bold;margin-bottom:8px;text-align:center;word-break:break-all;">操作: ${escapeHtml(item.trackingNumber)}</div>
@@ -314,10 +321,11 @@ function showItemActionDialog(id) {
             <button class="dialog-btn-cancel" id="btnClose">取消</button>
         </div>
     `;
-    
+
     overlay.querySelector('#btnToggle').onclick = () => {
         item.signed = !item.signed;
         saveData(expressList);
+        p2p.broadcast({ type: 'update', item: item }); // ← 添加这行
         showToast(item.signed ? '已标记为已签收' : '已标记为未签收');
         overlay.remove();
         render();
@@ -343,6 +351,7 @@ function showDeleteConfirm(id, trackingNumber) {
     overlay.querySelector('#btnConfirm').onclick = () => {
         expressList = expressList.filter(e => e.id !== id);
         saveData(expressList);
+        p2p.broadcast({ type: 'delete', id: id }); // ← 添加这行
         showToast('已删除');
         overlay.remove();
         render();
@@ -365,6 +374,7 @@ function showDeleteConfirmBatch() {
     overlay.querySelector('#btnCancel').onclick = () => overlay.remove();
     overlay.querySelector('#btnConfirm').onclick = () => {
         const ids = Array.from(selectedIds);
+        ids.forEach(id => p2p.broadcast({ type: 'delete', id: id })); // ← 添加这行
         expressList = expressList.filter(e => !ids.includes(e.id));
         saveData(expressList);
         showToast(`已删除 ${count} 个快递单号`);
@@ -377,10 +387,10 @@ function showDeleteConfirmBatch() {
 function loadScannerLibrary(callback) {
     if (scannerLibraryLoaded && window.Html5Qrcode) { callback(); return; }
     if (scannerLibraryLoading) { scannerLibraryCallbacks.push(callback); return; }
-    
+
     scannerLibraryLoading = true;
     scannerLibraryCallbacks.push(callback);
-    
+
     const script = document.createElement('script');
     script.src = 'html5-qrcode.min.js';
     script.onload = () => {
@@ -413,11 +423,11 @@ function startScan() {
             document.getElementById('btnCloseScanner').onclick = stopScan;
         }
         container.style.display = 'flex';
-        
+
         if (html5QrCode) {
-            html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+            html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => { });
         }
-        
+
         html5QrCode = new Html5Qrcode("reader");
         html5QrCode.start(
             { facingMode: "environment" },
@@ -445,7 +455,7 @@ function startScan() {
                 stopScan();
                 setTimeout(() => showScanResult(num), 100);
             },
-            () => {}
+            () => { }
         ).catch(err => {
             showToast('无法打开摄像头: ' + err.message);
             stopScan();
@@ -457,7 +467,7 @@ function startScan() {
 function stopScan() {
     scannerActive = false;
     if (html5QrCode) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => { });
         html5QrCode = null;
     }
     const container = document.getElementById('scannerContainer');
@@ -525,12 +535,98 @@ function showToast(msg) {
 
 // ==================== 初始化 ====================
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.addEventListener('click', function(e) {
+    overlay.addEventListener('click', function (e) {
         if (e.target === overlay) overlay.classList.remove('show');
     });
 });
 
+// ==================== P2P 同步绑定 ====================
+p2p.onDataReceived = (msg) => {
+    switch (msg.type) {
+        case 'sync-all':
+            // 收到全量数据
+            expressList = msg.data;
+            saveData(expressList);
+            render();
+            showToast('数据已同步');
+            break;
+
+        case 'add':
+            if (!expressList.find(e => e.id === msg.item.id)) {
+                expressList.push(msg.item);
+                saveData(expressList);
+                render();
+            }
+            break;
+
+        case 'delete':
+            expressList = expressList.filter(e => e.id !== msg.id);
+            saveData(expressList);
+            render();
+            break;
+
+        case 'update':
+            const index = expressList.findIndex(e => e.id === msg.item.id);
+            if (index !== -1) {
+                expressList[index] = msg.item;
+                saveData(expressList);
+                render();
+            }
+            break;
+    }
+};
+
+p2p.onSendAllData = () => expressList;
+
+p2p.onStatusChange = (status) => {
+    document.getElementById('p2pStatus').textContent = status;
+};
+
 render();
 
 // 预加载扫码库
-setTimeout(() => loadScannerLibrary(() => {}), 1000);
+setTimeout(() => loadScannerLibrary(() => { }), 1000);
+
+// ==================== P2P UI ====================
+function showP2PDialog() {
+    if (p2p.roomId) {
+        // 已连接，显示退出确认
+        if (confirm('确定要退出同步吗？')) {
+            leaveP2P();
+        }
+        return;
+    }
+    document.getElementById('p2pModal').classList.add('show');
+}
+
+function createP2PRoom() {
+    closeModal('p2pModal');
+    p2p.createRoom().then(roomId => {
+        document.getElementById('p2pBar').style.display = 'block';
+        document.getElementById('btnP2P').textContent = '📡✓';
+    }).catch(() => {
+        showToast('创建房间失败，请重试');
+    });
+}
+
+function joinP2PRoom() {
+    const roomId = document.getElementById('roomInput').value.trim();
+    if (!roomId || roomId.length !== 6) {
+        showToast('请输入6位房间码');
+        return;
+    }
+    closeModal('p2pModal');
+    p2p.joinRoom(roomId).then(() => {
+        document.getElementById('p2pBar').style.display = 'block';
+        document.getElementById('btnP2P').textContent = '📡✓';
+    }).catch(() => {
+        showToast('加入房间失败，请检查房间码');
+    });
+}
+
+function leaveP2P() {
+    p2p.leaveRoom();
+    document.getElementById('p2pBar').style.display = 'none';
+    document.getElementById('btnP2P').textContent = '📡';
+    showToast('已退出同步');
+}
