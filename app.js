@@ -543,46 +543,46 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // ==================== 智能合并逻辑 ====================
 function mergeData(remoteData) {
     if (!remoteData || remoteData.length === 0) return;
-    
+
     const localMap = {};
     expressList.forEach(item => {
         localMap[item.trackingNumber] = item;
     });
-    
+
     const merged = [];
     const processedNumbers = new Set();
-    
+
     // 遍历远程数据
     remoteData.forEach(remoteItem => {
         processedNumbers.add(remoteItem.trackingNumber);
-        
+
         const localItem = localMap[remoteItem.trackingNumber];
-        
+
         if (!localItem) {
             // 本地没有 → 添加
             merged.push({ ...remoteItem });
         } else {
             // 本地有 → 合并规则：已签收优先
             const mergedItem = { ...localItem };
-            
+
             // 如果远程是"已签收"，本地也改为"已签收"
             if (remoteItem.signed) {
                 mergedItem.signed = true;
                 mergedItem.signDate = remoteItem.signDate || Date.now();
             }
             // 如果远程是"未签收"，保持本地状态不变（不把已签收改回未签收）
-            
+
             merged.push(mergedItem);
         }
     });
-    
+
     // 添加本地独有的数据
     expressList.forEach(localItem => {
         if (!processedNumbers.has(localItem.trackingNumber)) {
             merged.push({ ...localItem });
         }
     });
-    
+
     expressList = merged;
 }
 
@@ -590,15 +590,38 @@ function mergeData(remoteData) {
 p2p.onDataReceived = (msg) => {
     switch (msg.type) {
         case 'sync-all':
-            // 智能合并：不是直接覆盖，而是逐条合并
+            // 接收到房主全量数据 → 智能合并
             mergeData(msg.data);
             saveData(expressList);
             render();
             showToast(`已同步，共 ${expressList.length} 条记录`);
             break;
-            
+
+        case 'request-sync':
+            // 房主请求本地数据 → 发送本地数据给房主
+            if (p2p.connections) {
+                const myData = expressList;
+                // 通过已建立的连接发送回去
+                Object.values(p2p.connections).forEach(conn => {
+                    if (conn.open) {
+                        conn.send({
+                            type: 'sync-response',
+                            data: myData
+                        });
+                    }
+                });
+            }
+            break;
+
+        case 'sync-response':
+        case 'merge-remote':
+            // 收到对方的数据 → 智能合并
+            mergeData(msg.data);
+            saveData(expressList);
+            render();
+            break;
+
         case 'add':
-            // 新增单号（如果本地没有就添加）
             if (!expressList.find(e => e.trackingNumber === msg.item.trackingNumber)) {
                 expressList.push(msg.item);
                 saveData(expressList);
@@ -606,19 +629,16 @@ p2p.onDataReceived = (msg) => {
                 showToast('收到新单号: ' + msg.item.trackingNumber);
             }
             break;
-            
+
         case 'delete':
-            // 删除单号
             expressList = expressList.filter(e => e.trackingNumber !== msg.trackingNumber);
             saveData(expressList);
             render();
             break;
-            
+
         case 'update':
-            // 更新状态：只改为"已签收"，不改回"未签收"
             const localItem = expressList.find(e => e.trackingNumber === msg.item.trackingNumber);
             if (localItem && msg.item.signed) {
-                // 对方标记为已签收 → 本地也标记为已签收
                 localItem.signed = true;
                 localItem.signDate = msg.item.signDate;
                 saveData(expressList);
@@ -666,10 +686,10 @@ function showP2PDialog() {
 function showRoomCodeDialog(roomId) {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:center;justify-content:center;';
-    
+
     // 判断是房主还是加入者
     const isHost = p2p.isHost;
-    
+
     overlay.innerHTML = `
         <div style="background:white;border-radius:16px;padding:24px;width:90%;max-width:360px;text-align:center;">
             <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">
@@ -696,15 +716,15 @@ function showRoomCodeDialog(roomId) {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(overlay);
-    
+
     overlay.querySelector('#btnCopyRoom').onclick = () => {
         navigator.clipboard.writeText(roomId).then(() => {
             showToast('房间码已复制: ' + roomId);
         }).catch(() => showToast('复制失败，请手动记录'));
     };
-    
+
     overlay.querySelector('#btnCloseRoom').onclick = () => overlay.remove();
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
