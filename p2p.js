@@ -25,22 +25,22 @@ class P2PManager {
     async createRoom() {
         this.isHost = true;
         this.roomId = generateRoomId();
-        
+
         try {
             await this.initPeer();
-            
+
             // 监听连接请求
             this.peer.on('connection', (conn) => {
                 this.handleConnection(conn);
             });
-            
+
             this.updateStatus('等待设备加入...');
-            
+
             // 回调通知房间创建成功
             if (this.onRoomCreated) {
                 this.onRoomCreated(this.roomId);
             }
-            
+
             return this.roomId;
         } catch (err) {
             console.error('创建房间失败:', err);
@@ -53,41 +53,41 @@ class P2PManager {
     async joinRoom(roomId) {
         this.isHost = false;
         this.roomId = roomId;
-        
+
         try {
             await this.initPeer();
-            
+
             this.updateStatus('正在连接房间 ' + roomId + '...');
-            
+
             // 连接到主机
-            const conn = this.peer.connect(roomId, { 
+            const conn = this.peer.connect(roomId, {
                 reliable: true,
                 serialization: 'json'
             });
-            
+
             conn.on('open', () => {
                 console.log('已连接到主机');
                 this.connections[conn.peer] = conn;
                 this.updateStatus('已连接 ✅');
             });
-            
+
             conn.on('data', (data) => {
                 if (this.onDataReceived) {
                     this.onDataReceived(data);
                 }
             });
-            
+
             conn.on('close', () => {
                 delete this.connections[conn.peer];
                 this.updateStatus('连接断开');
                 this.scheduleReconnect(roomId);
             });
-            
+
             conn.on('error', (err) => {
                 console.error('连接错误:', err);
                 this.updateStatus('连接失败，请检查房间码');
             });
-            
+
             return true;
         } catch (err) {
             console.error('加入房间失败:', err);
@@ -100,7 +100,7 @@ class P2PManager {
     async initPeer() {
         return new Promise((resolve, reject) => {
             const peerId = this.isHost ? this.roomId : generateId();
-            
+
             this.peer = new Peer(peerId, PEER_CONFIG);
 
             this.peer.on('open', (id) => {
@@ -133,8 +133,9 @@ class P2PManager {
         conn.on('open', () => {
             console.log('新设备已连接');
             this.connections[conn.peer] = conn;
-            this.updateStatus('已连接 ✅ (共 ' + Object.keys(this.connections).length + ' 台设备)');
-            
+            const count = Object.keys(this.connections).length;
+            this.updateStatus('已连接 ✅ (共 ' + count + ' 台设备)');
+
             // 主机发送当前数据给新设备
             if (this.isHost && this.onSendAllData) {
                 const allData = this.onSendAllData();
@@ -143,6 +144,11 @@ class P2PManager {
                     data: allData
                 });
                 console.log('已发送全量数据:', allData.length, '条');
+
+                // 请求新设备也发送它的数据给主机（双向同步）
+                conn.send({
+                    type: 'request-sync'
+                });
             }
         });
 
@@ -150,12 +156,29 @@ class P2PManager {
             if (this.onDataReceived) {
                 this.onDataReceived(raw);
             }
+
+            // 如果主机收到新设备的数据，广播给其他设备
+            if (this.isHost && raw.type === 'sync-response') {
+                // 主机自己先合并
+                if (this.onDataReceived) {
+                    this.onDataReceived({ type: 'merge-remote', data: raw.data });
+                }
+                // 再广播给其他设备
+                Object.values(this.connections).forEach(otherConn => {
+                    if (otherConn.peer !== conn.peer && otherConn.open) {
+                        otherConn.send({
+                            type: 'merge-remote',
+                            data: raw.data
+                        });
+                    }
+                });
+            }
         });
 
         conn.on('close', () => {
             delete this.connections[conn.peer];
             const count = Object.keys(this.connections).length;
-            this.updateStatus(count > 0 ? `已连接 ✅ (共 ${count} 台设备)` : '等待设备加入...');
+            this.updateStatus(count > 0 ? '已连接 ✅ (共 ' + count + ' 台设备)' : '等待设备加入...');
         });
 
         conn.on('error', (err) => {
